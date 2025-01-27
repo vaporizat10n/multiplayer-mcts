@@ -21,26 +21,27 @@ class Agent {
   Agent(GameState state = GameState(), bool shuffle_moves = true, uint64_t seed = 0)
       : rng_(seed),
         shuffle_moves_(shuffle_moves),
-        root(make_node(nullptr, -1, std::move(state), shuffle_moves ? &rng_ : nullptr)) {}
+        root_(make_node(nullptr, -1, std::move(state), shuffle_moves ? &rng_ : nullptr)) {}
 
   const GameState &state() const {
-    return root->state;
+    return root_->state;
   }
 
   // Plays `move` as the current player.
   void apply_move(Move move) {
-    auto &state = root->state;
-    auto &possible_moves = root->possible_moves;
+    auto &state = root_->state;
+    auto &possible_moves = root_->possible_moves;
     int move_index =
         std::ranges::distance(possible_moves.begin(), std::ranges::find(possible_moves, move));
-    if (move_index < root->children.size()) {
-      root = std::move(root->children[move_index]);
-      // Reset statistics for the root.
-      root->parent = nullptr;
-      root->player = -1;
-      root->score = 0.0;
+    if (move_index < root_->children.size()) {
+      root_ = std::move(root_->children[move_index]);
+      // Reset statistics for the root_.
+      root_->parent = nullptr;
+      root_->player = -1;
+      root_->score = 0.0;
     } else {
-      root = make_node(nullptr, -1, state.make_move(possible_moves[move_index]), root->shuffle_rng);
+      root_ =
+          make_node(nullptr, -1, state.make_move(possible_moves[move_index]), root_->shuffle_rng);
     }
   }
 
@@ -57,15 +58,15 @@ class Agent {
     }
     int move_index = -1;
     int most_visits = 0;
-    int child_count = root->children.size();
+    int child_count = root_->children.size();
     for (int i = 0; i < child_count; i++) {
-      int visits = root->children[i]->visits;
+      int visits = root_->children[i]->visits;
       if (visits > most_visits) {
         move_index = i;
         most_visits = visits;
       }
     }
-    return root->possible_moves[move_index];
+    return root_->possible_moves[move_index];
   }
 
  private:
@@ -79,20 +80,11 @@ class Agent {
   RNG rng_;
   bool shuffle_moves_;
 
-  std::unique_ptr<Node> root;
-
-  GameState rollout(GameState state) {
-    while (!state.terminal()) {
-      std::vector moves = state.possible_moves();
-      int choice = std::uniform_int_distribution<>(0, moves.size() - 1)(rng_);
-      state = state.make_move(moves[choice]);
-    }
-    return state;
-  }
+  std::unique_ptr<Node> root_;
 
   void execute_one_iteration() {
     auto select_node = [this]() -> Node * {
-      Node *node = root.get();
+      Node *node = root_.get();
       while (!node->is_terminal() && node->is_fully_expanded()) {
         node = node->select_child();
       }
@@ -104,6 +96,15 @@ class Agent {
     }
     GameState terminal_state = rollout(node->state);
     node->backpropagate(terminal_state);
+  }
+
+  GameState rollout(GameState state) {
+    while (!state.terminal()) {
+      std::vector moves = state.possible_moves();
+      int choice = std::uniform_int_distribution<>(0, moves.size() - 1)(rng_);
+      state = state.make_move(moves[choice]);
+    }
+    return state;
   }
 };
 
