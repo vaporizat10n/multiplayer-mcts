@@ -10,7 +10,7 @@ class TicTacToeState {
 
   TicTacToeState()
       : terminal_(false), winner_(-1), current_player_(0) {
-    occupied.fill(0);
+    occupied_.fill(0);
   }
 
   bool terminal() const {
@@ -18,7 +18,10 @@ class TicTacToeState {
   }
 
   bool is_valid_move(Move move) const {
-    return !occupied[0].test(move) && !occupied[1].test(move);
+    if (move < 0 || move > 8) {
+      return false;
+    }
+    return !occupied_[0].test(move) && !occupied_[1].test(move);
   }
 
   std::vector<Move> possible_moves() const {
@@ -33,15 +36,17 @@ class TicTacToeState {
     return moves;
   }
 
+  // makes the move directly
   void apply_move(Move move) {
     assert(!terminal());
     assert(is_valid_move(move));
-    occupied[current_player_].set(move);
+    occupied_[current_player_].set(move);
     check_terminal(current_player_);
     current_player_ ^= 1;
   }
 
-  TicTacToeState make_move(Move move) const {
+  // returns a copy of the new state
+  TicTacToeState simulate_move(Move move) const {
     TicTacToeState state(*this);
     state.apply_move(move);
     return state;
@@ -65,7 +70,7 @@ class TicTacToeState {
   }
 
   std::array<BitBoard, 2> get_info() const {
-    return occupied;
+    return occupied_;
   }
 
  private:
@@ -75,20 +80,20 @@ class TicTacToeState {
       BitBoard(0b100'010'001), BitBoard(0b001'010'100),
   };
 
-  std::array<BitBoard, 2> occupied;
+  std::array<BitBoard, 2> occupied_;
   bool terminal_;
   int winner_;
   int current_player_;
 
   std::bitset<9> get_empty_squares() const {
-    return ~(occupied[0] | occupied[1]);
+    return ~(occupied_[0] | occupied_[1]);
   }
 
   bool check_terminal(int player = -1) {
     assert(!terminal());
     auto check_win = [this](int player) -> bool {
-      const BitBoard &board = occupied[player];
-      for (const BitBoard &config : winning) {
+      const BitBoard& board = occupied_[player];
+      for (const BitBoard& config : winning) {
         if ((board & config) == config) {
           winner_ = player;
           return true;
@@ -97,7 +102,7 @@ class TicTacToeState {
       return false;
     };
     auto check_draw = [this]() -> bool {
-      return (occupied[0] | occupied[1]).all();
+      return (occupied_[0] | occupied_[1]).all();
     };
     if (player == -1) {
       terminal_ = check_win(0) || check_win(1) || check_draw();
