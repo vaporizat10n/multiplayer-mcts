@@ -9,6 +9,23 @@
 
 namespace mcts {
 
+// `mcts::Agent` takes a `GameState` type and provides an agent which can play the game.
+//
+// `GameState` must provide the following:
+//   - Nested Types
+//     - `Move`: Represents a Move.
+//   - Member Functions
+//     - `GameState simulate_move(Move move)`:
+//         Returns a copy of the state with `move` applied.
+//     - `std::vector<GameState::Move> possible_moves()`:
+//         Returns the valid moves for the current player in the game state.
+//     - `int current_player()`:
+//         Returns the unique integer id of the player to move.
+//     - `double get_result(int player)` (required for terminal states only):
+//         Returns a score for the player in the range [0, 1].
+//
+// Optionally takes a random number generator type (defaults to std::mt19937_64).
+//
 template <typename GameState, typename RNG = std::mt19937_64>
 class Agent {
  public:
@@ -23,14 +40,14 @@ class Agent {
         shuffle_moves_(shuffle_moves),
         root_(make_node(nullptr, -1, std::move(state), shuffle_moves ? &rng_ : nullptr)) {}
 
-  const GameState &state() const {
+  const GameState& state() const {
     return root_->state;
   }
 
   // Plays `move` as the current player.
   void apply_move(Move move) {
-    auto &state = root_->state;
-    auto &possible_moves = root_->possible_moves;
+    auto& state = root_->state;
+    auto& possible_moves = root_->possible_moves;
     int move_index =
         std::ranges::distance(possible_moves.begin(), std::ranges::find(possible_moves, move));
     if (move_index < root_->children.size()) {
@@ -40,13 +57,12 @@ class Agent {
       root_->player = -1;
       root_->score = 0.0;
     } else {
-      root_ =
-          make_node(nullptr, -1, state.make_move(possible_moves[move_index]), root_->shuffle_rng);
+      root_ = make_node(nullptr, -1, state.simulate_move(possible_moves[move_index]),
+                        root_->shuffle_rng);
     }
   }
 
-  // Searches for a move in `duration` using the MCTS algorithm. To apply this move, use the
-  // `apply_move()` function.
+  // Searches for a move in `duration`. To apply this move, use the `apply_move()` function.
   // Exhibits undefined behaviour if the game has already ended.
   Move search_move(std::chrono::steady_clock::duration duration) {
     auto get_time = []() -> std::chrono::steady_clock::time_point {
@@ -73,7 +89,7 @@ class Agent {
   struct Node;
 
   template <typename... Args>
-  static std::unique_ptr<Node> make_node(Args &&...args) {
+  static std::unique_ptr<Node> make_node(Args&&... args) {
     return std::make_unique<Node>(std::forward<Args>(args)...);
   }
 
@@ -83,14 +99,14 @@ class Agent {
   std::unique_ptr<Node> root_;
 
   void execute_one_iteration() {
-    auto select_node = [this]() -> Node * {
-      Node *node = root_.get();
+    auto select_node = [this]() -> Node* {
+      Node* node = root_.get();
       while (!node->is_terminal() && node->is_fully_expanded()) {
         node = node->select_child();
       }
       return node;
     };
-    Node *node = select_node();
+    Node* node = select_node();
     if (!node->is_terminal()) {
       node = node->expand();
     }
@@ -102,7 +118,7 @@ class Agent {
     while (!state.terminal()) {
       std::vector moves = state.possible_moves();
       int choice = std::uniform_int_distribution<>(0, moves.size() - 1)(rng_);
-      state = state.make_move(moves[choice]);
+      state = state.simulate_move(moves[choice]);
     }
     return state;
   }
@@ -111,7 +127,7 @@ class Agent {
 // Statistics for each move in the search tree.
 template <typename GameState, typename RNG>
 struct Agent<GameState, RNG>::Node {
-  Node(Node *_parent, int _player, GameState _state, RNG *_shuffle_rng)
+  Node(Node* _parent, int _player, GameState _state, RNG* _shuffle_rng)
       : parent(_parent),
         visits(0),
         player(_player),
@@ -125,7 +141,7 @@ struct Agent<GameState, RNG>::Node {
     next_untried_move = possible_moves.begin();
   }
 
-  Node *parent;
+  Node* parent;
   int visits;
 
   // The player who made the last move.
@@ -134,7 +150,7 @@ struct Agent<GameState, RNG>::Node {
 
   // Points to Agent::RNG if moves returned by `state.possible_moves()` should be
   // shuffled. Holds a `nullptr` otherwise.
-  RNG *shuffle_rng;
+  RNG* shuffle_rng;
 
   GameState state;
   std::vector<Move> possible_moves;
@@ -147,10 +163,10 @@ struct Agent<GameState, RNG>::Node {
   }
 
   // https://www.chessprogramming.org/UCT#Selection
-  Node *select_child(double c = std::numbers::sqrt2) const {
-    Node *best_child = nullptr;
+  Node* select_child(double c = std::numbers::sqrt2) const {
+    Node* best_child = nullptr;
     double best_uct = std::numeric_limits<double>::min();
-    for (const std::unique_ptr<Node> &child : children) {
+    for (const std::unique_ptr<Node>& child : children) {
       double uct = child->score / child->visits + c * sqrt(log(visits) / child->visits);
       if (uct > best_uct) {
         best_child = child.get();
@@ -164,16 +180,17 @@ struct Agent<GameState, RNG>::Node {
     return next_untried_move == possible_moves.end();
   }
 
-  Node *expand() {
+  Node* expand() {
     // assert(!is_fully_expanded());
     Move move = *next_untried_move++;
     return children
-        .emplace_back(make_node(this, state.current_player(), state.make_move(move), shuffle_rng))
+        .emplace_back(
+            make_node(this, state.current_player(), state.simulate_move(move), shuffle_rng))
         .get();
   }
 
-  void backpropagate(const GameState &terminal_state) {
-    for (Node *node = this; node; node = node->parent) {
+  void backpropagate(const GameState& terminal_state) {
+    for (Node* node = this; node; node = node->parent) {
       ++node->visits;
       // 'score' of the root state isn't useful anyway
       if (node->player != -1) {
